@@ -44,6 +44,7 @@ class MainWindow(QMainWindow):
         open_Excel_btn = QPushButton('엑셀 열기', self) # 엑셀 열기 버튼
         open_Excel_btn.resize(150, 50) # 엑셀 열기 버튼 크기
         open_Excel_btn.move(10, 10) # 엑셀 열기 버튼 위치 이동 (좌상단 기준)
+        open_Excel_btn.clicked.connect(self.open_excel)
 
         self.show() # 앱 보이기
 
@@ -90,6 +91,7 @@ class MainWindow(QMainWindow):
 
 class Worker(threading.Thread):
     def __init__(self, excel_filename):
+        super().__init__()
         print('worker')
 
 
