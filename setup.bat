@@ -46,4 +46,21 @@ echo selenium 설치를 시작합니다.
 %PYTHON_ROOT%Scripts\pip3.exe install selenium
 echo selenium 설치를 완료했습니다.
 
+REM get python3_anticaptcha
+echo python3_anticaptcha 설치를 시작합니다.
+%PYTHON_ROOT%Scripts\pip3.exe install python3-anticaptcha
+echo python3_anticaptcha 설치를 완료했습니다.
+
+REM get openpyxl
+echo openpyxl 설치를 시작합니다.
+%PYTHON_ROOT%Scripts\pip3.exe install openpyxl
+echo openpyxl 설치를 완료했습니다.
+
+REM get PyQt5
+echo PyQt5 설치를 시작합니다.
+%PYTHON_ROOT%Scripts\pip3.exe install PyQt5
+echo PyQt5 설치를 완료했습니다.
+
+
+
 pause
