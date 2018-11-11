@@ -20,8 +20,12 @@ from python3_anticaptcha import ImageToTextTask
 from openpyxl import load_workbook
 
 # 데스크탑 앱 모듈
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QFileDialog, 
     QDesktopWidget, QPushButton, QMessageBox)
+
+
+JOBS_DONE = 'jobs_done' # 멀티프로세스 종료 플래그
 
 
 """
@@ -45,9 +49,16 @@ class MainWindow(QMainWindow):
         self.createButton('마지막 글 지우기', 150, 50, 10, 70, self.deleteLastPost) # 마지막 글 지우기 버튼 생성
         self.createButton('다른 글 바꾸기', 150, 50, 10, 130, self.modifyOtherPost) # 다른 글 바꾸기 버튼 생성
 
-        self.q = MPQueue() # 멀티프로세싱 큐
+        self.q = MPQueue() # 멀티프로세스 큐
 
-        self.show() # 앱 보이기
+        self.ui_thread = UIThread(self.q)
+        self.ui_thread.popup_message.connect(self.createMessageBox)
+        self.ui_thread.start()
+
+
+    @pyqtSlot(str)
+    def createMessageBox(self, message):
+        QMessageBox.about(self, '', message)
 
 
     def createButton(self, text, width, height, x, y, callback):
@@ -74,8 +85,8 @@ class MainWindow(QMainWindow):
         if not success:
             return
 
-        writeProc = Process(target=writeProcess, args=(filename, self.q))
-        writeProc.start()
+        writer_proc = Process(target=writerProcess, args=(filename, self.q))
+        writer_proc.start()
         
 
     def deleteLastPost(self):
@@ -83,8 +94,8 @@ class MainWindow(QMainWindow):
         if not success:
             return
 
-        deleteProc = Process(target=deleteProcess, args=(filename, self.q))
-        deleteProc.start()
+        deleter_proc = Process(target=deleterProcess, args=(filename, self.q))
+        deleter_proc.start()
 
 
     def modifyOtherPost(self):
@@ -92,23 +103,50 @@ class MainWindow(QMainWindow):
         if not success:
             return
 
-        modifyProc = Process(target=modifyProcess, args=(filename, self.q))
-        modifyProc.start()
+        modifier_proc = Process(target=modifierProcess, args=(filename, self.q))
+        modifier_proc.start()
+        
+
+class UIThread(QThread):
+    popup_message = pyqtSignal(str)
+
+    def __init__(self, q):
+        super().__init__()
+        self.q = q
 
 
-def writeProcess(excel_filename, q):
+    def run(self):
+        while True:
+            msg = self.q.get()
+
+            if msg == JOBS_DONE:
+                break
+
+            self.popup_message.emit(msg)
+
+
+def writerProcess(excel_filename, q):
     book = load_workbook(excel_filename, read_only=True) # 엑셀 파일
     sheet = book.worksheets[0] # 첫번째 시트
 
     """
     시트 포맷
         A   B   C        D        E         F         G     H     I     J       K
-    1 [id][pw][subject][content][content2][content3][imgs][tags][hour][minute][is_open]
+    1 [id][pw][subject][content][content2][content3][imgs][tags][hour][minute][is_open (yes or no)]
     2 [my_id][my_pw][my_subject]...
     3 [other_id][other_pw][other_subject]...
     4 ...
     """
     rows = sheet.iter_rows(min_row=2) # 첫번째 행을 제외한 나머지 행
+
+    # 크롬 시크릿 창으로 열기 설정
+    chrome_opts = webdriver.ChromeOptions()
+    chrome_opts.add_argument('--incognito')
+
+    driver = webdriver.Chrome(chrome_options=chrome_opts) # 크롬 열기
+    if not driver:
+        q.put('크롬을 열 수 없습니다.')
+        return
 
     for row in rows:
         my_id = row[0].value
@@ -124,15 +162,17 @@ def writeProcess(excel_filename, q):
         my_is_open = row[10].value
 
 
-def deleteProcess(excel_filename, q):
-    pass
+def deleterProcess(excel_filename, q):
+    q.put('실패')
 
 
-def modifyProcess(excel_filename, q):
-    pass
+def modifierProcess(excel_filename, q):
+    q.put(JOBS_DONE)
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    mainWindow = MainWindow()
+    main_window = MainWindow()
+    main_window.show()
+
     sys.exit(app.exec_())
