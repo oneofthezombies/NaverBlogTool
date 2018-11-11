@@ -1,3 +1,4 @@
 {
-    "python.pythonPath": "${workspaceFolder}/Program/Python/python.exe"
+    "python.pythonPath": "${workspaceFolder}/program/python/python.exe",
+    "python.linting.pylintEnabled": true
 }
