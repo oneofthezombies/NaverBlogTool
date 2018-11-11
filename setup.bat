@@ -18,8 +18,8 @@ if %OS%==64BIT (
 )
 
 REM set path variable
-set PROGRAM_PATH=%~dp0Program\
-set PYTHON_ROOT=%PROGRAM_PATH%Python\
+set PROGRAM_PATH=%~dp0program\
+set PYTHON_ROOT=%PROGRAM_PATH%python\
 
 REM unzip python 
 echo 파이썬 압축해제를 시작합니다.
@@ -60,7 +60,5 @@ REM get PyQt5
 echo PyQt5 설치를 시작합니다.
 %PYTHON_ROOT%Scripts\pip3.exe install PyQt5
 echo PyQt5 설치를 완료했습니다.
-
-
 
 pause
