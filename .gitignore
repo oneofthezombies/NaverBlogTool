@@ -331,3 +331,5 @@ ASALocalRun/
 
 # my additional ignores
 Python/
+PythonAntiCaptchaImages/
+images/
