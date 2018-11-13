@@ -41,24 +41,34 @@ echo 파이썬 경로 추가를 시작합니다. (현재 사용자의 환경변수)
 setx PYTHONPATH "%PYTHON_ROOT%;%PYTHON_ROOT%Lib;%PYTHON_ROOT%Lib\site-packages"
 echo 파이썬 경로 추가를 완료했습니다.
 
-REM get selenium
+REM install selenium
 echo selenium 설치를 시작합니다.
 %PYTHON_ROOT%Scripts\pip3.exe install selenium
 echo selenium 설치를 완료했습니다.
 
-REM get python3_anticaptcha
+REM install python3_anticaptcha
 echo python3_anticaptcha 설치를 시작합니다.
 %PYTHON_ROOT%Scripts\pip3.exe install python3-anticaptcha
 echo python3_anticaptcha 설치를 완료했습니다.
 
-REM get openpyxl
+REM install openpyxl
 echo openpyxl 설치를 시작합니다.
 %PYTHON_ROOT%Scripts\pip3.exe install openpyxl
 echo openpyxl 설치를 완료했습니다.
 
-REM get PyQt5
+REM install PyQt5
 echo PyQt5 설치를 시작합니다.
 %PYTHON_ROOT%Scripts\pip3.exe install PyQt5
 echo PyQt5 설치를 완료했습니다.
+
+REM install pyautogui
+echo pyautogui 설치를 시작합니다.
+%PYTHON_ROOT%Scripts\pip3.exe install pyautogui
+echo pyautogui 설치를 완료했습니다.
+
+REM install pyperclip
+echo pyautogui 설치를 시작합니다.
+%PYTHON_ROOT%Scripts\pip3.exe install pyperclip
+echo pyautogui 설치를 완료했습니다.
 
 pause
