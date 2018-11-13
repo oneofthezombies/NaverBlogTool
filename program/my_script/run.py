@@ -3,26 +3,29 @@
 """
 
 # 시스템
-import sys
+import sys, os, time
 from multiprocessing import Process, Queue as MPQueue
 
-# 크롬 브라우저 제어 모듈
+# 크롬 브라우저 제어
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException
 
-# 캡챠 모듈
-from python3_anticaptcha import ImageToTextTask
+from python3_anticaptcha import ImageToTextTask # 안티캡챠
 
-# 엑셀 모듈
-from openpyxl import load_workbook
+from openpyxl import load_workbook # 엑셀 
 
 # 데스크탑 앱 모듈
 from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot, QThread
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QFileDialog, 
     QDesktopWidget, QPushButton, QMessageBox)
+
+import pyautogui # 마우스/키보드 컨트롤
+
+import pyperclip # 클립보드
 
 
 JOBS_DONE = 'jobs_done' # 멀티프로세스 메시지 큐 종료 플래그
@@ -37,7 +40,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.setWindowTitle('네이버 블로그 도구') # 앱 이름        
-        self.setGeometry(0, 0, 170, 190) # 앱 크기
+        self.setGeometry(0, 0, 350, 190) # 앱 크기
 
         # 앱을 화면 가운데로 옮기기
         rect = self.frameGeometry()
@@ -167,8 +170,7 @@ def writerProcess(excel_filename, q):
 
     """
     시트 포맷
-        A   B   C        D        E         F         G     H     I     J       K
-    1 [id][pw][subject][content][content2][content3][imgs][tags][hour][minute][is_open (yes or no)]
+    1 [id][pw][subject][content1][content2][content3][tags][imgs][year][month][day][hour][minute][is_open]
     2 [my_id][my_pw][my_subject]...
     3 [other_id][other_pw][other_subject]...
     4 ...
@@ -179,41 +181,52 @@ def writerProcess(excel_filename, q):
     chrome_opts = webdriver.ChromeOptions()
     chrome_opts.add_argument('--incognito')
 
-    driver = webdriver.Chrome('./program/chromedriver.exe', chrome_options=chrome_opts) # 크롬 열기
+    driver = webdriver.Chrome(executable_path='./program/chromedriver.exe', chrome_options=chrome_opts) # 크롬 열기
 
     # 크롬 열기 실패시 종료
     if not driver:
         q.put('크롬을 열 수 없습니다.')
         return
 
-    prev_my_id = '' # 이전 행 아이디
+    prev_id = '!' # 이전 행 아이디
     for row in rows:
-        my_id = row[0].value
-        my_pw = row[1].value
-        my_subject = row[2].value
-        my_content = row[3].value
-        my_content2 = row[4].value
-        my_content3 = row[5].value
-        my_imgs = row[6].value
-        my_tags = row[7].value
-        my_hour = row[8].value
-        my_minute = row[9].value
-        my_is_open = row[10].value
+        id_ = row[0].value
+        if id_ == None: # 아이디가 비어있으면 넘어간다
+            continue
+
+        pw = row[1].value
+        subject = row[2].value
+        content = row[3].value
+        content2 = row[4].value
+        content3 = row[5].value
+        tags = row[6].value
+        imgs = row[7].value
+        year = row[8].value
+        month = row[9].value
+        day = row[10].value
+        hour = row[11].value
+        minute = row[12].value
+        is_open = row[13].value
 
         # 아이디가 다르면 새로 로그인하기
-        if prev_my_id != my_id:
-            prev_my_id = my_id # 다음 루프 확인용으로 아이디 저장하기
+        if prev_id != id_:
+            prev_id = id_ # 다음 루프 확인용으로 아이디 저장하기
 
             succ = naverLogout(driver, q) # 로그아웃 한번 하기
             if not succ:
                 return
 
-            succ = naverLogin(driver, q, my_id, my_pw) # 로그인 하기
+            print('로그인 시도')
+            succ = naverLogin(driver, q, id_, pw) # 로그인 하기
             if not succ:
                 return
-
-        writeNewPost(driver, q, my_subject, my_content, my_content2, my_content3, my_tags, my_imgs, my_hour, my_minute, my_is_open)
             
+            print('로그인 성공')
+
+        writeNewPost(driver, q, id_, subject, content, content2, content3, tags, imgs, year, month, day, hour, minute, is_open)
+
+    print('새글쓰기 프로세스 종료')
+
 
 """
 네이버 로그아웃하기
@@ -222,8 +235,8 @@ def naverLogout(driver, q):
     driver.get('https://nid.naver.com/nidlogin.logout') # 네이버 로그아웃
 
     try:
-        elem_id_fld = WebDriverWait(driver, timeout=3).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="id"]'))) # 아이디 입력 필드
+        elem_logout_msg = WebDriverWait(driver, timeout=3).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="content"]/div[1]/p'))) # 로그아웃 메시지
 
     except TimeoutException:
         q.put('타임아웃: 네이버 로그아웃')
@@ -235,89 +248,213 @@ def naverLogout(driver, q):
 """
 네이버 로그인하기
 """
-def naverLogin(driver, q, my_id, my_pw):
+def naverLogin(driver, q, id_, pw):
     driver.get('https://nid.naver.com/nidlogin.login') # 네이버 로그인 창 열기
 
     try:
-        elem_id_fld = WebDriverWait(driver, timeout=3).until(
+        elem_id = WebDriverWait(driver, timeout=3).until(
             EC.presence_of_element_located((By.XPATH, '//*[@id="id"]'))) # 아이디 입력 필드
 
     except TimeoutException:
         q.put('타임아웃: 네이버 로그인')
         return False
 
-    elem_id_fld.send_keys(my_id) # 아이디 쓰기    
-    driver.find_element_by_xpath('//*[@id="pw"]').send_keys(my_pw) # 비밀번호 쓰기    
-    driver.find_element_by_xpath('//*[@id="frmNIDLogin"]/fieldset/input').click() # 로그인 버튼 누르기
+    elem_id.send_keys(id_) # 아이디 쓰기
+    elem_pw = driver.find_element_by_xpath('//*[@id="pw"]') # 비밀번호 쓰기   
+    elem_pw.send_keys(pw)
+    elem_pw.submit()
 
     try:
-        elem_logout_btn = WebDriverWait(driver, timeout=3).until(
-            EC.presence_of_element_located((By.XPATH, '//*[@id="btn_logout"]/span'))) # 로그아웃 버튼 있는지 확인
+        elem_main = WebDriverWait(driver, timeout=3).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="PM_ID_ct"]'))) # 네이버 메인
 
-    # 로그아웃 버튼이 없다면
+    # 네이버 메인이 아니라면
     except TimeoutException:
+        print('로그인 실패')
         try:
-            elem_captcha_fld = WebDriverWait(driver, timeout=3).until(
+            elem_captcha = WebDriverWait(driver, timeout=3).until(
                 EC.presence_of_element_located((By.XPATH, '//*[@id="chptcha"]'))) # 캡챠 입력 필드가 있는지 확인
 
-        # TODO: 캡챠 익셉션 핸들링            
         except TimeoutException:
-            return True
+            print('로그인 재시도')
+            return naverLogin(driver, q, id_, pw)
 
-        elem_captcha_img = driver.find_element_by_xpath('//*[@id="captchaimg"]') # 캡챠 이미지 원소
+        return antiCaptcha(driver, q, id_, pw)
 
-        captcha_img_url = elem_captcha_img.get_attribute('src') # 캡챠 이미지 주소
+    return True
 
-        ANTICAPTCHA_KEY = '5330b0f08fe52776ce6caaf56321539d' # 안티캡챠 키
 
-        # 캡챠 정답
-        captcha_answer = ImageToTextTask.ImageToTextTask(
-            anticaptcha_key=ANTICAPTCHA_KEY, save_format='const').captcha_handler(captcha_link=captcha_img_url)
+"""
+안티캡챠
+"""
+def antiCaptcha(driver, q, id_, pw):
+    print('안티캡챠 실행')
 
-        captcha_text = captcha_answer['solution']['text'] # 캡챠 정답 문자열
+    elem_captcha_img = driver.find_element_by_xpath('//*[@id="captchaimg"]') # 캡챠 이미지 원소
 
-        driver.find_element_by_xpath('//*[@id="pw"]').send_keys(my_pw) # 비밀번호 쓰기
-        elem_captcha_fld.send_keys(captcha_text) # 캡챠 정답 문자열 쓰기
-        driver.find_element_by_xpath('//*[@id="login_submit"]').click() # 로그인 버튼 누르기
+    captcha_img_url = elem_captcha_img.get_attribute('src') # 캡챠 이미지 주소
 
-        return True
+    ANTICAPTCHA_KEY = '5330b0f08fe52776ce6caaf56321539d' # 안티캡챠 키
+
+    # 캡챠 정답
+    captcha_answer = ImageToTextTask.ImageToTextTask(
+        anticaptcha_key=ANTICAPTCHA_KEY, save_format='const').captcha_handler(captcha_link=captcha_img_url)
+
+    if not 'solution' in captcha_answer:
+        print('로그인 재시도')
+        return naverLogin(driver, q, id_, pw)
+    
+    captcha_text = captcha_answer['solution']['text'] # 캡챠 정답 문자열
+
+    elem_pw = driver.find_element_by_xpath('//*[@id="pw"]') # 비밀번호 쓰기
+    elem_pw.send_keys(pw)
+    driver.find_element_by_xpath('//*[@id="chptcha"]').send_keys(captcha_text) # 캡챠 정답 문자열 쓰기
+    elem_pw.submit()
+
+    try:
+        elem_main = WebDriverWait(driver, timeout=3).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="PM_ID_ct"]'))) # 네이버 메인
+
+    except TimeoutException:
+        print('로그인 재시도')
+        return naverLogin(driver, q, id_, pw)
+
+    return True
 
 
 """
 새글 쓰기
 """
-def writeNewPost(driver, q, subject, content, content2, content3, tags, imgs, hour, minute, is_open):
+def writeNewPost(driver, q, id_, subject, content, content2, content3, tags, imgs, year, month, day, hour, minute, is_open):
     driver.get('https://blog.editor.naver.com/editor') # 에디터창 열기
+    
+    try:
+        elem_popup = WebDriverWait(driver, timeout=6).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div[6]/div/div/div[2]/a'))) # 새글쓰기 팝업창 있는지 확인
+    except:
+        pass
 
     try:
-        elem_popup = WebDriverWait(driver, timeout=3).until(
-            EC.presence_of_element_located((By.XPATH, '/html/body/div[6]/div/div/div[2]/a'))) # 새글쓰기 팝업창 있는지 확인
+        driver.execute_script('arguments[0].click();', elem_popup) # 새글쓰기 팝업창이 있다면 닫기
+    except:
+        pass
+
+    try:
+        elem_canvas_frm = WebDriverWait(driver, timeout=3).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="se_canvas_frame"]')))
 
     except TimeoutException:
-        pass
+        q.put('타임아웃: 캔버스 프레임')
+        return False
 
-    finally:
+    try:
+        elem_img = WebDriverWait(driver, timeout=3).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="se_side_comp_list"]/li[2]/button'))) # 이미지 올리기 버튼
+
+    except TimeoutException:
+        q.put('타임아웃: 이미지 올리기 버튼')
+        return False
+
+    cwd = os.getcwd() # 현재 디렉터리
+    cwd += '/'
+
+    imgs = [img for img in imgs.splitlines() if img != ''] # 이미지별 분리하기
+
+    # 경로와 파일이름 분리
+    path_filenames = [[]]
+    path_filenames.pop()
+    for img in imgs:
+        i = img.rfind('/')
+        if i == -1:
+            path_filenames.append([None, img])
+        else:
+            path_filenames.append([img[:i+1], img[i+1:]])
+
+    # 이미지 업로드
+    for pf in path_filenames:
+        elem_img.click() # 이미지 업로드 버튼 클릭
+        time.sleep(2) # 파일 열기창 기다리기
+
+        # 경로 입력
+        for i in range(5):
+            pyautogui.press('tab')
+        pyautogui.press('enter')
+        if pf[0] != None:
+            pyautogui.typewrite(cwd + pf[0])
+        else:
+            pyautogui.typewrite(cwd)
+        pyautogui.press('enter')
+
+        # 파일 입력
+        for i in range(5):
+            pyautogui.press('tab')
+        pyautogui.typewrite(pf[1])
+        pyautogui.press('enter')
+        time.sleep(4) # 파일 업로드 기다리기
+
+    driver.switch_to.frame(elem_canvas_frm) # 본문 프레임
+    
+    pyperclip.copy(subject)
+    driver.find_element_by_xpath('//textarea').send_keys(Keys.CONTROL, 'v') # 제목
+    time.sleep(2)
+
+    pyperclip.copy('\n'.join([content, content2, content3]))
+    driver.find_element_by_xpath('//div[@contenteditable="true"]').send_keys(Keys.CONTROL, 'v') # 본문
+    time.sleep(2)
+
+    pyperclip.copy(tags)    
+    driver.find_element_by_xpath('//li/input[@type="text"]').send_keys(Keys.CONTROL, 'v') # 태그 #,(컴마)로 구분되어야 함
+    time.sleep(2)
+
+    driver.switch_to.default_content()
+
+    elem_align_center = driver.find_element_by_xpath('//a[@class="btn_alignCenter __se_align_btn"]')
+    driver.execute_script('arguments[0].click();', elem_align_center)
+
+    elem_publish = driver.find_element_by_xpath('//a[@id="se_top_publish_btn"]')
+    driver.execute_script('arguments[0].click();', elem_publish)
+
+    try:
+        elem_appointment_btn = WebDriverWait(driver, timeout=3).until(
+            EC.presence_of_element_located((By.XPATH, '//*[@id="se_top_publish_setting_layer"]/div[1]/div[2]/div[3]/button[2]')))
+
+    except TimeoutException:
+        q.put('타임아웃: 예약발행 버튼 유무')
+        return False
+
+    ymd = '예약 안함'
+    if year != '예약 안함':
+        driver.execute_script('arguments[0].click();', elem_appointment_btn) # 예약발행 버튼 클릭
+
         try:
-            driver.execute_script('arguments[0].click();', elem_popup) # 새글쓰기 팝업창이 있다면 닫기
+            elem_hour = WebDriverWait(driver, timeout=3).until(
+                EC.presence_of_element_located((By.XPATH, '//select[@class="hour"]')))
+        except TimeoutException:
+            q.put('타임아웃: 시간 예약 버튼')
+            return False
 
-        except:
-            pass
+        elem_ymd = driver.find_element_by_xpath('//input[@type="text" and @class="date hasDatepicker" and @readonly="true"]')
+        driver.execute_script('arguments[0].removeAttribute("readonly");', elem_ymd) # 읽기 전용 속성 제거
+        ymd = '{0}.{1:02d}.{2:02d}'.format(year, int(month), int(day))
+        driver.execute_script("arguments[0].setAttribute('value', arguments[1])", elem_ymd, ymd) # 년월일
 
-    while True:
-        pass
+        driver.find_element_by_xpath('//select[@class="hour"]/option[text()="{:02d}"]'.format(int(hour))).click() # 시간 입력
+        driver.find_element_by_xpath('//select[@class="minutes"]/option[text()="{:02d}"]'.format(minute)).click() # 분 입력
 
-    # 제목 쓰기 //*[@id="documentTitle_8761958271541983606916"]/div[2]/div/div[4]/div/div/textarea
-    #driver.find_element_by_xpath('//*[@id="documentTitle_1715842561541981314717"]/div[2]/div/div[4]/div/div/textarea').send_keys(subject)
+    if is_open == '공개':
+        driver.find_element_by_xpath('//label[@for="lv_public_1"]').click() # 공개로 설정
+    else:
+        driver.find_element_by_xpath('//label[@for="lv_public_4"]').click() # 비공개로 설정
 
-    # 본문 쓰기
-    #driver.find_element_by_xpath('//*[@id="paragraph_1436506121541981314727"]/div[1]/div/div[4]/div/div/div/div').send_keys(content)
+    elem_publish_confirm = driver.find_element_by_xpath('//button[@class="btn_publish"]')
+    driver.execute_script('arguments[0].click();', elem_publish_confirm) # 발행하기
+    
+    if year == '예약 안함':
+        print('{0}, {1}, {2}, {3} 게시 완료'.format(id_, subject, year, is_open))
+    else:
+        print('{0}, {1}, {2}, {3}:{4}, {5} 게시 완료'.format(id_, subject, ymd, hour, minute, is_open))
 
-    # 태그 쓰기
-    #driver.find_element_by_xpath('//*[@id="se_canvas_body"]/div[3]/div/div/div/div/span/ul/li/input').send_keys(tags)
-
-    # 그림 아이콘 누르기
-    #driver.find_element_by_xpath('//*[@id="se_side_comp_list"]/li[2]/button').click()
-
+    time.sleep(5) # 업로드 완료 기다리기
 
 
 def deleterProcess(excel_filename, q):
